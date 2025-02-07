@@ -127,6 +127,13 @@ def log_message(message: str, logfile, highlight: bool = False) -> None:
         logfile.write(message + "\n")
         logfile.flush()
 
+def build_ack_packet(source: str, destination: str, msg_id: str) -> bytes:
+    """
+    Builds an AX.25 acknowledgement packet.
+    """
+    ack_text = f"ack{msg_id}"
+    return build_ax25_message_packet(source, destination, [], ack_text, "")
+
 def receiver(sock: socket.socket, logfile, exit_event: threading.Event, default_source: str) -> None:
     """
     Continuously receives data, decodes KISS frames and AX.25 packets,
@@ -169,8 +176,22 @@ def receiver(sock: socket.socket, logfile, exit_event: threading.Event, default_
                     source = addresses[1]
                     with heard_lock:
                         heard_stations[source] = decoded_str
-            except Exception:
-                pass
+                # Check if the packet is addressed to the default source and contains a message ID
+                if len(addresses) > 0 and addresses[0] == default_source:
+                    msg_id_start = decoded_str.find("{")
+                    msg_id_end = decoded_str.find("}")
+                    if msg_id_start != -1 and msg_id_end != -1:
+                        msg_id = decoded_str[msg_id_start+1:msg_id_end]
+                        log_message(f"Preparing to send ACK for message ID: {msg_id}", logfile)
+                        ack_packet = build_ack_packet(default_source, source, msg_id)
+                        kiss_frame = kiss_encode(ack_packet)
+                        try:
+                            sock.sendall(kiss_frame)
+                            log_message(f"Sent ACK: {decode_ax25_packet(ack_packet)}", logfile)
+                        except Exception as e:
+                            log_message(f"Error sending ACK: {e}", logfile)
+            except Exception as e:
+                log_message(f"Error processing received packet: {e}", logfile)
 
 def ax25_encode_address(callsign: str, last: bool) -> bytes:
     """
