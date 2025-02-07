@@ -208,6 +208,10 @@ def build_ax25_message_packet(source: str, destination: str, digipeaters: list, 
     
     control = bytes([0x03])
     pid = bytes([0xF0])
+    
+    # Ensure destination is 9 characters long
+    destination = destination.ljust(9)
+    
     if msg_id:
         info = f":{destination}:{message_text}{{{msg_id}}}".encode('ascii')
     else:
