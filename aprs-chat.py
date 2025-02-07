@@ -111,7 +111,7 @@ def log_message(message: str, logfile) -> None:
     Logs a message to the console and the log file.
     """
     with log_lock:
-        print(message)
+        print("\n" + message)  # Add newline before message
         logfile.write(message + "\n")
         logfile.flush()
 
