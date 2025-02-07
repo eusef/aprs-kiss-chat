@@ -15,6 +15,9 @@ log_lock = threading.Lock()
 heard_lock = threading.Lock()
 heard_stations = {}  # Maps station call sign -> most recent packet (human-readable)
 
+# Global flag to pause logging
+pause_logging = threading.Event()
+
 def kiss_encode(data: bytes) -> bytes:
     """
     Encodes raw data into a KISS frame using command byte 0x00.
@@ -111,7 +114,8 @@ def log_message(message: str, logfile) -> None:
     Logs a message to the console and the log file.
     """
     with log_lock:
-        print("\n" + message)  # Add newline before message
+        if not pause_logging.is_set():
+            print("\n" + message)  # Add newline before message
         logfile.write(message + "\n")
         logfile.flush()
 
@@ -232,6 +236,7 @@ def create_message_packet(logfile) -> bytes:
     The user reviews the human-readable packet and can send, edit, or cancel.
     Returns the binary AX.25 packet ready for KISS encoding.
     """
+    pause_logging.set()  # Pause logging
     source = input("Enter source call sign (e.g., W7PDJ-10): ").strip()
     destination = input("Enter destination call sign (e.g., W7PDJ-7): ").strip()
     digi_input = input("Enter digipeater path (optional, comma-separated, e.g., WIDE2-1): ").strip()
@@ -259,8 +264,10 @@ def create_message_packet(logfile) -> bytes:
         print(f"  Full packet    : {packet_str}\n")
         choice = input("Send this packet (s), edit a field (e), or cancel (c)? ").strip().lower()
         if choice == 's':
+            pause_logging.clear()  # Resume logging
             return build_ax25_message_packet(source, destination, digipeaters, message_text, msg_id)
         elif choice == 'c':
+            pause_logging.clear()  # Resume logging
             return None
         elif choice == 'e':
             field = input("Which field to edit? (source/destination/digipeaters/message/msgid): ").strip().lower()
