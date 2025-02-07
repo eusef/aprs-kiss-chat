@@ -243,7 +243,7 @@ def create_message_packet(logfile) -> bytes:
     else:
         packet_str = f"{source}>{destination}:{message_text}"
     if msg_id:
-        packet_str += f"{{{msg_id}"
+        packet_str += f"{{{msg_id}}}"
     
     while True:
         print("\nConstructed APRS Message Packet:")
@@ -279,7 +279,7 @@ def create_message_packet(logfile) -> bytes:
             else:
                 packet_str = f"{source}>{destination}:{message_text}"
             if msg_id:
-                packet_str += f"{{{msg_id}"
+                packet_str += f"{{{msg_id}}}"
         else:
             print("Invalid option. Please choose 's', 'e', or 'c'.")
 
