@@ -209,9 +209,9 @@ def build_ax25_message_packet(source: str, destination: str, digipeaters: list, 
     control = bytes([0x03])
     pid = bytes([0xF0])
     if msg_id:
-        info = f":{message_text}{{{msg_id}}}".encode('ascii')
+        info = f"::{destination}:{message_text}{{{msg_id}}}".encode('ascii')
     else:
-        info = f":{message_text}".encode('ascii')
+        info = f"::{destination}:{message_text}".encode('ascii')
     return bytes(addresses) + control + pid + info
 
 def create_message_packet(logfile) -> bytes:
