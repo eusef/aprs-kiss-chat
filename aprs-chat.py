@@ -3,6 +3,10 @@ import socket
 import threading
 import time
 import sys
+from colorama import Fore, Back, Style, init
+
+# Initialize colorama
+init()
 
 # KISS protocol constants
 FEND  = 0xC0  # Frame delimiter
@@ -109,17 +113,21 @@ def decode_ax25_packet(packet: bytes) -> str:
     
     return f"{header} : {info_str}"
 
-def log_message(message: str, logfile) -> None:
+def log_message(message: str, logfile, highlight: bool = False) -> None:
     """
     Logs a message to the console and the log file.
+    If highlight is True, the message is highlighted with a green background and black text.
     """
     with log_lock:
         if not pause_logging.is_set():
-            print("\n" + message)  # Add newline before message
+            if highlight:
+                print(Back.GREEN + Fore.BLACK + "\n" + message + Style.RESET_ALL)
+            else:
+                print("\n" + message)  # Add newline before message
         logfile.write(message + "\n")
         logfile.flush()
 
-def receiver(sock: socket.socket, logfile, exit_event: threading.Event) -> None:
+def receiver(sock: socket.socket, logfile, exit_event: threading.Event, default_source: str) -> None:
     """
     Continuously receives data, decodes KISS frames and AX.25 packets,
     logs them, and updates the heard stations dictionary.
@@ -152,7 +160,8 @@ def receiver(sock: socket.socket, logfile, exit_event: threading.Event) -> None:
             del buffer[:end_index+1]
             decoded_bytes = kiss_decode(frame)
             decoded_str = decode_ax25_packet(decoded_bytes)
-            log_message(f"Received: {decoded_str}", logfile)
+            highlight = default_source in decoded_str
+            log_message(f"Received: {decoded_str}", logfile, highlight)
             # Update heard stations with the most recent packet from the source.
             try:
                 addresses, _ = decode_ax25_address_field(decoded_bytes)
@@ -222,12 +231,12 @@ def build_ax25_message_packet(source: str, destination: str, digipeaters: list, 
         info = f":{destination}:{message_text}".encode('ascii')
     return bytes(addresses) + control + pid + info
 
-def create_message_packet(logfile) -> bytes:
+def create_message_packet(logfile, default_source: str = "") -> bytes:
     """
     Interactively creates an APRS message packet.
     
     Prompts for:
-      - Source call sign (e.g., W7PDJ-10)
+      - Source call sign (e.g., W7PDJ-10) if not provided as default_source
       - Destination call sign (e.g., W7PDJ-7)
       - Optional digipeater path (comma-separated, e.g., WIDE2-1,WIDE3-1)
       - Message text
@@ -237,7 +246,14 @@ def create_message_packet(logfile) -> bytes:
     Returns the binary AX.25 packet ready for KISS encoding.
     """
     pause_logging.set()  # Pause logging
-    source = input("Enter source call sign (e.g., W7PDJ-10): ").strip()
+    if default_source:
+        use_default = input(f"Use default source call sign '{default_source}'? (y/n): ").strip().lower()
+        if use_default == 'y':
+            source = default_source
+        else:
+            source = input("Enter source call sign (e.g., W7PDJ-10): ").strip()
+    else:
+        source = input("Enter source call sign (e.g., W7PDJ-10): ").strip()
     destination = input("Enter destination call sign (e.g., W7PDJ-7): ").strip()
     digi_input = input("Enter digipeater path (optional, comma-separated, e.g., WIDE2-1): ").strip()
     # Split the digipeaters on comma and remove extra spaces.
@@ -298,12 +314,15 @@ def main():
     # Configuration for remote Direwolf KISS interface
     host = "localhost"  # Default host
     port = 8001         # Default port
+    default_source = "" # Default source callsign
 
     # Check for command-line arguments
     if len(sys.argv) > 1:
         host = sys.argv[1]
     if len(sys.argv) > 2:
         port = int(sys.argv[2])
+    if len(sys.argv) > 3:
+        default_source = sys.argv[3]
 
     logfile = open("log.txt", "w")
     try:
@@ -321,7 +340,7 @@ def main():
     log_message(f"Example APRS Message Packet: {example_packet}", logfile)
 
     exit_event = threading.Event()
-    receiver_thread = threading.Thread(target=receiver, args=(sock, logfile, exit_event), daemon=True)
+    receiver_thread = threading.Thread(target=receiver, args=(sock, logfile, exit_event, default_source), daemon=True)
     receiver_thread.start()
 
     try:
@@ -331,7 +350,7 @@ def main():
                 exit_event.set()
                 break
             elif command == 'new':
-                packet_binary = create_message_packet(logfile)
+                packet_binary = create_message_packet(logfile, default_source)
                 if packet_binary:
                     kiss_frame = kiss_encode(packet_binary)
                     try:
